@@ -261,7 +261,7 @@ class updates:
 
     def get_hardware_flags_dtname(self):
         if os.path.exists('/usr/bin/dtname'):
-            dtname = self.oe.execute('/usr/bin/dtname', get_result=1).rstrip('\x00')
+            dtname = self.oe.execute('/usr/bin/dtname', get_result=1).rstrip('\x00\n')
         else:
             dtname = "unknown"
 
@@ -274,7 +274,7 @@ class updates:
             return self.get_hardware_flags_x86_64()
         elif self.oe.PROJECT == "RPi":
             return self.get_hardware_flags_rpi()
-        elif self.oe.PROJECT in ['Allwinner', 'Amlogic', 'Rockchip']:
+        elif self.oe.PROJECT in ['Allwinner', 'Amlogic', 'Amlogic-ng', 'Rockchip']:
             return self.get_hardware_flags_dtname()
         else:
             self.oe.dbg_log('updates::get_hardware_flags', 'Project is %s, no hardware flag available' % self.oe.PROJECT, 0)
@@ -470,9 +470,7 @@ class updates:
         try:
             self.oe.dbg_log('updates::get_json', 'enter_function', 0)
             if url is None:
-                url = self.UPDATE_DOWNLOAD_URL % ('releases', 'releases.json')
-            if url.split('/')[-1] != 'releases.json':
-                url = url + '/releases.json'
+                url = self.UPDATE_DOWNLOAD_URL % ('update.coreelec.org', '', 'releases.php')
             data = self.oe.load_url(url)
             if not data is None:
                 update_json = json.loads(data)
@@ -539,17 +537,13 @@ class updates:
             if hasattr(self, 'update_in_progress'):
                 self.oe.dbg_log('updates::check_updates_v2', 'Update in progress (exit)', 0)
                 return
-            if self.struct['update']['settings']['SubmitStats']['value'] == '1':
-                systemid = self.oe.SYSTEMID
-            else:
-                systemid = "NOSTATS"
             if self.oe.BUILDER_VERSION:
                 version = self.oe.BUILDER_VERSION
             else:
                 version = self.oe.VERSION
             url = '%s?i=%s&d=%s&pa=%s&v=%s&f=%s' % (
                 self.UPDATE_REQUEST_URL,
-                self.oe.url_quote(systemid),
+                self.oe.url_quote(self.oe.SYSTEMID),
                 self.oe.url_quote(self.oe.DISTRIBUTION),
                 self.oe.url_quote(self.oe.ARCHITECTURE),
                 self.oe.url_quote(version),
@@ -557,6 +551,8 @@ class updates:
                 )
             if self.oe.BUILDER_NAME:
                url += '&b=%s' % self.oe.url_quote(self.oe.BUILDER_NAME)
+            if self.struct['update']['settings']['SubmitStats']['value'] == '0':
+               url += '&nostats'
 
             self.oe.dbg_log('updates::check_updates_v2', 'URL: %s' % url, 0)
             update_json = self.oe.load_url(url)
@@ -565,12 +561,18 @@ class updates:
                 update_json = json.loads(update_json)
                 self.last_update_check = time.time()
                 if 'update' in update_json['data'] and 'folder' in update_json['data']:
-                    self.update_file = self.UPDATE_DOWNLOAD_URL % (update_json['data']['folder'], update_json['data']['update'])
+                    self.update_file = self.UPDATE_DOWNLOAD_URL % (update_json['data']['host'], update_json['data']['folder'], update_json['data']['update'])
                     if self.struct['update']['settings']['UpdateNotify']['value'] == '1':
                         self.oe.notify(self.oe._(32363).encode('utf-8'), self.oe._(32364).encode('utf-8'))
                     if self.struct['update']['settings']['AutoUpdate']['value'] == 'auto' and force == False:
                         self.update_in_progress = True
                         self.do_autoupdate(None, True)
+                    else:
+                        if self.oe.BUILD == 'official':
+                            ceUpdate = xbmcgui.Dialog().yesno('CoreELEC', 'An update is available, would you like to download it now?')
+                            if(ceUpdate):
+                                self.update_in_progress = True
+                                self.do_autoupdate(None, True)
             self.oe.dbg_log('updates::check_updates_v2', 'exit_function', 0)
         except Exception, e:
             self.oe.dbg_log('updates::check_updates_v2', 'ERROR: (' + repr(e) + ')')
@@ -588,6 +590,9 @@ class updates:
                         self.oe.notify(self.oe._(32363), self.oe._(32366))
                     shutil.move(self.oe.TEMP + 'update_file', self.LOCAL_UPDATE_DIR + self.update_file)
                     subprocess.call('sync', shell=True, stdin=None, stdout=None, stderr=None)
+                    ceReboot = xbmcgui.Dialog().yesno('CoreELEC', 'An update has been downloaded, would you like to reboot now to apply it?')
+                    if(ceReboot):
+                        xbmc.restart()
                     if silent == False:
                         self.oe.winOeMain.close()
                         time.sleep(1)
