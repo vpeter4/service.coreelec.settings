@@ -512,6 +512,24 @@ def openWizard():
     except Exception, e:
         dbg_log('oe::openWizard', 'ERROR: (' + repr(e) + ')')
 
+def openReleaseNotes():
+    global winOeMain, __cwd__, __oe__
+    try:
+        RNOTES = load_file('/etc/release-notes')
+        RNOTES_TITLE = 'Release Notes: CoreELEC %s' % VERSION
+
+        #TODO: fix so this can be done in a way that doesn't leave blank line
+        regex = '\[TITLE\](.*?)\[\/TITLE\]'
+        match = re.search(regex, RNOTES, re.IGNORECASE)
+        if match:
+          RNOTES_TITLE = match.group(1)
+          RNOTES = re.sub(regex, "", RNOTES)
+
+        CLdialog = xbmcgui.Dialog()
+        CLdialog.textviewer(RNOTES_TITLE, RNOTES, 1)
+    except Exception, e:
+        dbg_log('oe::openChangeLog', 'ERROR: (' + repr(e) + ')')
+
 
 def openConfigurationWindow():
     global winOeMain, __cwd__, __oe__, dictModules
@@ -907,6 +925,12 @@ else:
   RPI_CPU_VER = ''
 
 BOOT_STATUS = load_file('/storage/.config/boot.status')
+BOOT_HINT = load_file('/storage/.config/boot.hint')
+
+if os.path.getsize('/etc/release-notes') > 1:
+  HAS_RNOTES = 1
+else:
+  HAS_RNOTES = 0
 
 ############################################################################################
 
